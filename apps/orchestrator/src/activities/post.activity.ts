@@ -18,6 +18,7 @@ import { timer } from '@gitroom/helpers/utils/timer';
 import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
 import { WebhooksService } from '@gitroom/nestjs-libraries/database/prisma/webhooks/webhooks.service';
 import { TypedSearchAttributes } from '@temporalio/common';
+import { WorkflowExecutionAlreadyStartedError } from '@temporalio/client';
 import {
   organizationId,
   postId as postIdSearchParam,
@@ -193,20 +194,33 @@ export class PostActivity {
       integration
     );
 
-    await this._temporalService.client
-      .getRawClient()
-      .workflow.start('streakWorkflow', {
-        args: [{ organizationId: integration.organizationId }],
-        workflowId: `streak_${integration.organizationId}`,
-        taskQueue: 'main',
-        workflowIdConflictPolicy: 'TERMINATE_EXISTING',
-        typedSearchAttributes: new TypedSearchAttributes([
-          {
-            key: organizationId,
-            value: integration.organizationId,
-          },
-        ]),
-      });
+    try {
+      await this._temporalService.client
+        .getRawClient()
+        .workflow.start('streakWorkflow', {
+          args: [{ organizationId: integration.organizationId }],
+          workflowId: `streak_${integration.organizationId}`,
+          taskQueue: 'main',
+          workflowIdConflictPolicy: 'TERMINATE_EXISTING',
+          typedSearchAttributes: new TypedSearchAttributes([
+            {
+              key: organizationId,
+              value: integration.organizationId,
+            },
+          ]),
+        });
+    } catch (error) {
+      if (
+        error instanceof WorkflowExecutionAlreadyStartedError ||
+        (error as Error)?.name === 'WorkflowExecutionAlreadyStartedError'
+      ) {
+        console.warn(
+          `[Ignored] streakWorkflow already started for org: ${integration.organizationId}`
+        );
+      } else {
+        throw error;
+      }
+    }
 
     return postNow;
   }
