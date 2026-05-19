@@ -27,6 +27,7 @@ import { OpenaiService } from '@gitroom/nestjs-libraries/openai/openai.service';
 dayjs.extend(utc);
 import * as Sentry from '@sentry/nestjs';
 import { TemporalService } from 'nestjs-temporal-core';
+import { WorkflowNotFoundError } from '@temporalio/client';
 import { TypedSearchAttributes } from '@temporalio/common';
 import {
   organizationId,
@@ -589,31 +590,39 @@ export class PostsService {
     const post = await this._postRepository.deletePost(orgId, group);
 
     if (post?.id) {
-      try {
-        const workflows = this._temporalService.client
-          .getRawClient()
-          ?.workflow.list({
-            query: `postId="${post.id}" AND ExecutionStatus="Running"`,
-          });
-
-        for await (const executionInfo of workflows) {
-          try {
-            const workflow =
-              await this._temporalService.client.getWorkflowHandle(
-                executionInfo.workflowId
-              );
-            if (
-              workflow &&
-              (await workflow.describe()).status.name !== 'TERMINATED'
-            ) {
-              await workflow.terminate();
-            }
-          } catch (err) {}
-        }
-      } catch (err) {}
+      await this.terminatePostWorkflow(post.id);
     }
 
     return { error: true };
+  }
+
+  /** IAOptim patch #1213/#1340 — terminate via handle, not workflow.list(). */
+  private async terminatePostWorkflow(postId: string): Promise<void> {
+    const workflowId = `post_${postId}`;
+    try {
+      const handle = this._temporalService.client.getWorkflowHandle(workflowId);
+      const status = (await handle.describe()).status.name;
+      if (status !== 'TERMINATED') {
+        await handle.terminate('post deleted by iaoptim');
+        console.log(`[iaoptim-patch] terminated workflow ${workflowId}`);
+      }
+    } catch (err) {
+      if (
+        err instanceof WorkflowNotFoundError ||
+        (err as Error)?.name === 'WorkflowNotFoundError' ||
+        (typeof (err as Error)?.message === 'string' &&
+          (err as Error).message.toLowerCase().includes('workflow not found'))
+      ) {
+        console.warn(
+          `[iaoptim-patch] workflow ${workflowId} not found (probably already completed)`
+        );
+        return;
+      }
+      console.error(
+        `[iaoptim-patch] failed to terminate workflow ${workflowId}:`,
+        err
+      );
+    }
   }
 
   async countPostsFromDay(orgId: string, date: Date) {
