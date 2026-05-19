@@ -600,7 +600,8 @@ export class PostsService {
   private async terminatePostWorkflow(postId: string): Promise<void> {
     const workflowId = `post_${postId}`;
     try {
-      const handle = this._temporalService.client.getWorkflowHandle(workflowId);
+      const handle =
+        await this._temporalService.client.getWorkflowHandle(workflowId);
       const status = (await handle.describe()).status.name;
       if (status !== 'TERMINATED') {
         await handle.terminate('post deleted by iaoptim');
