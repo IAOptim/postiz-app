@@ -7,6 +7,10 @@ on:
     tags:
       - '*'
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build-containers-common:
     runs-on: ubuntu-latest
@@ -42,7 +46,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ github.token }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and Push Image
         env:
@@ -67,7 +71,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ github.token }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Docker Manifest
         env:
