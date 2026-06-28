@@ -11,7 +11,7 @@ import { SocialAbstract } from '@gitroom/nestjs-libraries/integrations/social.ab
 import { FacebookDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/facebook.dto';
 import { DribbbleDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/dribbble.dto';
 import { Integration } from '@prisma/client';
-import { hasExtension } from '@gitroom/helpers/utils/has.extension';
+
 import { timer } from '@gitroom/helpers/utils/timer';
 import { Rules } from '@gitroom/nestjs-libraries/chat/rules.description.decorator';
 
@@ -411,7 +411,7 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
     if (isStory) {
       let lastPostId = '';
       for (const media of firstPost?.media || []) {
-        const isVideoStory = hasExtension(media.path, 'mp4');
+        const isVideoStory = media.path.toLowerCase().split('?')[0].endsWith('.mp4');
         if (isVideoStory) {
           const { video_id, upload_url } = await (
             await this.fetch(
