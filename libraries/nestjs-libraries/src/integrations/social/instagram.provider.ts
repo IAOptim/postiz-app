@@ -401,7 +401,12 @@ export class InstagramProvider
     ).json();
 
     return {
-      id,
+      // Facebook et Instagram renvoient tous les deux l'id du compte Facebook (/me).
+      // Sans préfixe, les deux réseaux entrent en collision sur la clé unique
+      // organizationId_internalId et s'écrasent mutuellement à l'étape 1.
+      // Le préfixe ne vit qu'entre l'étape 1 et l'étape 2 : saveProviderPage réécrit
+      // ensuite l'internalId avec l'id réel du compte Instagram choisi.
+      id: `instagram_${id}`,
       name,
       accessToken: access_token,
       refreshToken: access_token,
