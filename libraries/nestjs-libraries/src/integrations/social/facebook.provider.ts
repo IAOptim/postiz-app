@@ -402,7 +402,10 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
     postDetails: PostDetails<FacebookDto>[]
   ): Promise<PostResponse[]> {
     const [firstPost] = postDetails;
-    const isStory = firstPost?.settings?.post_type === 'story';
+    const postType = firstPost?.settings?.post_type;
+    const isStory = postType === 'story';
+    const isReel = postType === 'reel';
+    const isVideo = postType === 'video';
 
     let finalId = '';
     let finalUrl = '';
@@ -498,7 +501,55 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
 
       finalId = lastPostId;
       finalUrl = `https://www.facebook.com/stories/${lastPostId}`;
-    } else if ((firstPost?.media?.[0]?.path?.indexOf('mp4') || -2) > -1) {
+    } else if (isReel) {
+       const media = firstPost?.media?.[0];
+       if (!media) throw new Error('No media for reel');
+       const { video_id, upload_url } = await (
+         await this.fetch(
+           `https://graph.facebook.com/v20.0/${id}/video_reels?upload_phase=start&access_token=${accessToken}`,
+           { method: 'POST' },
+           'start video reel upload'
+         )
+       ).json();
+
+       await this.fetch(
+         upload_url,
+         {
+           method: 'POST',
+           headers: { Authorization: `OAuth ${accessToken}`, file_url: media.path },
+         },
+         'upload video reel'
+       );
+
+       let videoStatus = 'in_progress';
+       while (videoStatus !== 'ready' && videoStatus !== 'upload_complete') {
+         const { status } = await (
+           await this.fetch(`https://graph.facebook.com/v20.0/${video_id}?fields=status&access_token=${accessToken}`, undefined, '', 0, true)
+         ).json();
+         videoStatus = status?.video_status || 'in_progress';
+         if (videoStatus === 'error') throw new Error('Video processing failed');
+         if (videoStatus !== 'ready' && videoStatus !== 'upload_complete') await timer(10000);
+       }
+
+       const finishUrl = `https://graph.facebook.com/v20.0/${id}/video_reels?upload_phase=finish&video_id=${video_id}&access_token=${accessToken}`;
+       const { video_id: reelPostId } = await (
+         await this.fetch(
+           finishUrl,
+           {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({
+               video_state: 'PUBLISHED',
+               description: firstPost.message || ''
+             })
+           },
+           'finish video reel upload'
+         )
+       ).json();
+       
+       finalId = reelPostId || video_id;
+       finalUrl = 'https://www.facebook.com/reel/' + finalId;
+    } else if (isVideo || (!postType && (firstPost?.media?.[0]?.path?.indexOf('mp4') || -2) > -1)) {
       const {
         id: videoId,
         permalink_url,

@@ -532,7 +532,8 @@ export class InstagramProvider
   ): Promise<PostResponse[]> {
     const [firstPost] = postDetails;
     console.log('in progress', id);
-    const isStory = firstPost.settings.post_type === 'story';
+    const postType = firstPost.settings?.post_type;
+    const isStory = postType === 'story';
     const isTrialReel = !!firstPost.settings.is_trial_reel;
     const medias = await Promise.all(
       firstPost?.media?.map(async (m) => {
@@ -540,24 +541,26 @@ export class InstagramProvider
           firstPost.media?.length === 1
             ? `&caption=${encodeURIComponent(firstPost.message)}`
             : ``;
-        const isCarousel =
+        const isCarouselParam =
           (firstPost?.media?.length || 0) > 1 && !isStory ? `&is_carousel_item=true` : ``;
-        const mediaType =
-          m.path.indexOf('.mp4') > -1
+        
+        const isMp4 = m.path.indexOf('.mp4') > -1;
+        let mediaTypeParam = '';
+        if (postType === 'story') {
+          mediaTypeParam = isMp4 ? `video_url=${m.path}&media_type=STORIES` : `image_url=${m.path}&media_type=STORIES`;
+        } else if (postType === 'reel' || postType === 'video') {
+          mediaTypeParam = `video_url=${m.path}&media_type=REELS&thumb_offset=${m?.thumbnailTimestamp || 0}`;
+        } else if (postType === 'carousel') {
+          mediaTypeParam = isMp4 ? `video_url=${m.path}&media_type=VIDEO&thumb_offset=${m?.thumbnailTimestamp || 0}` : `image_url=${m.path}`;
+        } else {
+          // Fallback logic
+          mediaTypeParam = isMp4
             ? firstPost?.media?.length === 1
-              ? isStory
-                ? `video_url=${m.path}&media_type=STORIES`
-                : `video_url=${m.path}&media_type=REELS&thumb_offset=${
-                    m?.thumbnailTimestamp || 0
-                  }`
-              : isStory
-              ? `video_url=${m.path}&media_type=STORIES`
-              : `video_url=${m.path}&media_type=VIDEO&thumb_offset=${
-                  m?.thumbnailTimestamp || 0
-                }`
-            : isStory
-            ? `image_url=${m.path}&media_type=STORIES`
+              ? `video_url=${m.path}&media_type=REELS&thumb_offset=${m?.thumbnailTimestamp || 0}`
+              : `video_url=${m.path}&media_type=VIDEO&thumb_offset=${m?.thumbnailTimestamp || 0}`
             : `image_url=${m.path}`;
+        }
+        const mediaType = mediaTypeParam;
 
         const trialParams = isTrialReel
           ? `&trial_params=${encodeURIComponent(
@@ -577,7 +580,7 @@ export class InstagramProvider
 
         const { id: photoId } = await (
           await this.fetch(
-            `https://${type}/v20.0/${id}/media?${mediaType}${isCarousel}${collaborators}${trialParams}&access_token=${accessToken}${caption}`,
+            `https://${type}/v20.0/${id}/media?${mediaType}${isCarouselParam}${collaborators}${trialParams}&access_token=${accessToken}${caption}`,
             {
               method: 'POST',
             }

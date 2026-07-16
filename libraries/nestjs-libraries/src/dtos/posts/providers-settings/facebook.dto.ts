@@ -6,7 +6,7 @@ export class FacebookDto {
   @IsUrl()
   url?: string;
 
-  @IsIn(['post', 'story'])
+  @IsIn(['post', 'story', 'carousel', 'reel', 'video'])
   @IsOptional()
-  post_type?: 'post' | 'story';
+  post_type?: 'post' | 'story' | 'carousel' | 'reel' | 'video';
 }
